@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Road to Sub-19 · a 5k training analysis</title>
+<meta name="description" content="Analysing my Strava running data and a 12-week, evidence-based plan toward a sub-19 minute 5k.">
+<style>
+/* ==========================================================================
+   Road to Sub-19
+   One self-contained page: plain HTML, CSS and JavaScript. Every chart is
+   hand-built SVG. No libraries, no fonts or scripts loaded from elsewhere.
+   ========================================================================== */
+
+/* ---- Colour roles. Light values here; dark values in the media query. ---- */
+:root {
+  color-scheme: light;
+  --page:        #f9f9f9;
+  --surface:     #ffffff;
+  --ink:         #191919;
+  --ink-2:       #666666;
+  --grid:        #e7e7e7;
+  --axis:        #c2c2c2;
+  --ring:        rgba(11, 11, 11, 0.10);
+  --series-1:    #257de0;   /* easy running / main series (blue)  */
+  --series-2:    #f47230;   /* hard sessions / long runs (orange) */
+  --accent-soft: #e8f1fc;
+  --good:        #006c10;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page:        #0b0b0b;
+    --surface:     #191919;
+    --ink:         #efefef;
+    --ink-2:       #9c9c9c;
+    --grid:        #303030;
+    --axis:        #474747;
+    --ring:        rgba(255, 255, 255, 0.10);
+    --series-1:    #338ced;
+    --series-2:    #e76624;
+    --accent-soft: #14253a;
+    --good:        #53c556;
+  }
+}
+
+/* ---- Base ---- */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+a { color: var(--series-1); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+h1, h2, h3 { line-height: 1.2; margin: 0; }
+h2 { font-size: 1.6rem; margin-bottom: 8px; }
+h3 { font-size: 1.05rem; margin-bottom: 4px; }
+p { margin: 0 0 12px; }
+.muted { color: var(--ink-2); }
+.small { font-size: 0.875rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---- Header ---- */
+header { padding: 56px 0 32px; }
+.eyebrow {
+  font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-2); margin-bottom: 10px;
+}
+h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); letter-spacing: -0.02em; }
+.lede { font-size: 1.15rem; max-width: 640px; margin-top: 14px; color: var(--ink-2); }
+
+/* ---- Sections and cards ---- */
+section { padding: 28px 0; }
+.section-intro { max-width: 680px; margin-bottom: 20px; }
+.card {
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--ring);
+  padding: 20px;
+}
+.grid { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.stack > * + * { margin-top: 16px; }
+
+/* ---- Stat tiles ---- */
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
+.tile .label { font-size: 0.8rem; color: var(--ink-2); }
+.tile .value { font-size: 1.9rem; font-weight: 650; letter-spacing: -0.01em; margin: 2px 0; }
+.tile .note  { font-size: 0.8rem; color: var(--ink-2); }
+.tile.highlight { background: var(--accent-soft); }
+
+/* ---- Charts ---- */
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--ink-2); font-size: 12px; font-family: inherit; }
+.chart .label-strong { fill: var(--ink); font-weight: 600; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:hover + .hover-ring, .chart .hover-ring.on { opacity: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.85rem; color: var(--ink-2); margin: 4px 0 10px; }
+.legend span::before {
+  content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 6px; vertical-align: -1px; background: var(--c);
+}
+.tooltip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.1s;
+  background: var(--surface); color: var(--ink); border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--ring), 0 4px 16px rgba(0,0,0,0.12);
+  padding: 8px 10px; font-size: 0.8rem; line-height: 1.4; white-space: nowrap; z-index: 2;
+}
+.tooltip b { font-weight: 650; }
+details.table-view { margin-top: 10px; }
+details.table-view summary { cursor: pointer; color: var(--ink-2); font-size: 0.85rem; }
+
+/* ---- Tables ---- */
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); }
+th { color: var(--ink-2); font-weight: 600; font-size: 0.8rem; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.table-scroll { overflow-x: auto; }
+
+/* ---- Small pieces ---- */
+.pill {
+  display: inline-block; font-size: 0.75rem; padding: 1px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--ink);
+}
+.callout { border-left: 3px solid var(--series-1); padding: 4px 0 4px 14px; }
+ul.clean { margin: 0; padding-left: 18px; }
+ul.clean li { margin-bottom: 6px; }
+ol.refs { padding-left: 20px; font-size: 0.9rem; }
+ol.refs li { margin-bottom: 8px; }
+footer { padding: 32px 0 56px; color: var(--ink-2); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="eyebrow">A running data project</div>
+  <h1>Road to Sub-19</h1>
+  <p class="lede">Can I take my 5k from a 19:51 parkrun to under 19 minutes in twelve weeks?
+    My Strava data shows where I am now; the plan below is built from the research on
+    how runners improve without getting injured.</p>
+</header>
+
+<main>
+
+  <!-- ===== 1. Headline numbers ===== -->
+  <section class="wrap" aria-labelledby="h-now">
+    <h2 id="h-now" class="sr-only" hidden>Headline numbers</h2>
+    <div class="tiles" id="tiles"><!-- filled from RAW by script --></div>
+  </section>
+
+  <!-- ===== 2. Training so far ===== -->
+  <section class="wrap" aria-labelledby="h-training">
+    <div class="section-intro">
+      <h2 id="h-training">Training so far</h2>
+      <p class="muted" id="training-intro"><!-- filled by script --></p>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <h3>Weekly distance, last 26 weeks (km)</h3>
+        <p class="small muted">Each bar is a Monday–Sunday week. Orange is distance from hard sessions
+          (average HR ≥ 158 or max HR ≥ 195).</p>
+        <div class="legend">
+          <span style="--c: var(--series-1)">Easy and long runs</span>
+          <span style="--c: var(--series-2)">Hard sessions</span>
+        </div>
+        <div class="chart" id="chart-weekly"></div>
+        <details class="table-view">
+          <summary>Show as a table</summary>
+          <div class="table-scroll" id="table-weekly"></div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3>Easy-run efficiency (metres per heartbeat)</h3>
+        <p class="small muted">Metres covered per heartbeat on easy runs: grade-adjusted speed divided
+          by average heart rate. Higher means more speed for the same effort. Dots are single runs;
+          the line is a 5-run rolling average.</p>
+        <div class="chart" id="chart-eff"></div>
+        <p class="small muted" id="eff-note" style="margin-top:10px"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 3. Performance evidence ===== -->
+  <section class="wrap" aria-labelledby="h-perf">
+    <div class="section-intro">
+      <h2 id="h-perf">How fast am I right now?</h2>
+      <p class="muted">Three pieces of evidence, from most to least official. A race result counts
+        for most; a projection from a different distance counts for least.</p>
+    </div>
+
+    <div class="grid grid-3" id="evidence"><!-- filled by script --></div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>The 22 October track session, kilometre by kilometre</h3>
+      <p class="small muted" id="track-intro"></p>
+      <div class="legend">
+        <span style="--c: var(--series-1)">Kilometre split</span>
+        <span style="--c: var(--ink-2)">Goal race pace, 3:47/km</span>
+      </div>
+      <div class="chart" id="chart-splits"></div>
+      <details class="table-view">
+        <summary>Show as a table</summary>
+        <div class="table-scroll" id="table-splits"></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===== 4. The plan ===== -->
+  <section class="wrap" aria-labelledby="h-plan">
+    <div class="section-intro">
+      <h2 id="h-plan">The 12-week plan</h2>
+      <p class="muted">30 November 2026 to race day, Saturday 20 February 2027. Target:
+        <b>18:50–18:55</b>, run as even kilometres at 3:46–3:47.</p>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <h3>Weekly distance (km)</h3>
+        <div class="legend">
+          <span style="--c: var(--series-2)">Sunday long run</span>
+          <span style="--c: var(--series-1)">Everything else</span>
+        </div>
+        <div class="chart" id="chart-plan"></div>
+        <div class="table-scroll" style="margin-top:12px" id="table-plan"></div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>A typical week</h3>
+          <table>
+            <tbody>
+              <tr><td>Monday</td><td>Rest or swim</td></tr>
+              <tr><td>Tuesday</td><td>Intervals at 3:40–3:52/km</td></tr>
+              <tr><td>Wednesday</td><td>Easy run</td></tr>
+              <tr><td>Thursday</td><td>Threshold at 4:05–4:15/km</td></tr>
+              <tr><td>Friday</td><td>Rest or swim</td></tr>
+              <tr><td>Saturday</td><td>Easy run</td></tr>
+              <tr><td>Sunday</td><td>Long run, easy pace</td></tr>
+            </tbody>
+          </table>
+          <p class="small muted" style="margin-top:10px">Easy means 5:30–6:15/km with heart rate
+            mostly under 150.</p>
+        </div>
+
+        <div class="card">
+          <h3>The rules the plan follows</h3>
+          <ul class="clean small">
+            <li><b>Less hard running.</b> About 4 in 10 of my recent runs were hard. The plan keeps
+              two quality sessions a week and makes everything else easy. It's informed by
+              Stöggl &amp; Sperlich [3], but with a weekly threshold session it's closer to a
+              pyramidal mix than a strictly polarized one.</li>
+            <li><b>No single-run spikes.</b> No run is more than 10% longer than my longest run in
+              the previous 30 days, following Frandsen et al. [2].</li>
+            <li><b>Gentle returns.</b> After each recovery week, volume comes back to about 90% of
+              the last full week rather than jumping straight to the old peak [1].</li>
+            <li><b>A real taper.</b> The last two weeks average about 45% less distance than
+              week 10, with the intensity kept, in line with Bosquet et al. [4].</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card callout-card">
+        <h3>Week 8 checkpoint: parkrun time trial, Saturday 23 January</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Result</th><th>What it means</th></tr></thead>
+            <tbody>
+              <tr><td class="num">19:15 or faster</td><td>On track for sub-19</td></tr>
+              <tr><td class="num">19:15–19:40</td><td>Keep going and reassess after week 10</td></tr>
+              <tr><td class="num">Slower than 19:40</td><td>Treat February as a stepping stone</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted" style="margin-top:10px" id="checkpoint-result">Result: to come.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 5. Method and sources ===== -->
+  <section class="wrap" aria-labelledby="h-method">
+    <div class="section-intro">
+      <h2 id="h-method">Method and sources</h2>
+    </div>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3>How the data was handled</h3>
+        <ul class="clean small">
+          <li>Source: my Strava “Download your account” export. Only runs from 2025–2026 are
+            used, and only date, distance, moving time, grade-adjusted distance and heart rate
+            are kept. No routes, maps, start times or activity names are published.</li>
+          <li>Dates are Strava's UTC dates. New Zealand is ahead of UTC, so a Saturday-morning
+            parkrun shows up on the Friday.</li>
+          <li>Runs are classed as <b>hard</b> (average HR ≥ 158 or max HR ≥ 195),
+            <b>long</b> (15 km or more) or <b>easy</b>. Race efforts always count as hard. Heart rate comes from a wrist sensor,
+            which can lag or spike during hard efforts, so the hard/easy split is approximate.
+            Runs before June 2026 have no heart rate.</li>
+          <li>Runs slower than 7:00/km grade-adjusted are left out of the efficiency chart
+            (mixed hike/run outings).</li>
+          <li>One fix: on 4 March 2026 the moving time is broken by a GPS glitch, so elapsed
+            time is used.</li>
+          <li>The export has no splits, so the 22 October kilometre splits are entered
+            separately. Their distance was checked by counting laps.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>References</h3>
+        <ol class="refs">
+          <li>Nielsen RO et al. (2014). Excessive progression in weekly running distance and
+            risk of running-related injuries. <i>J Orthop Sports Phys Ther</i> 44:739–747.
+            (Studied novice runners.)</li>
+          <li>Frandsen JSB, Nielsen RO et al. (2025). How much running is too much? Identifying
+            high-risk running sessions in a 5200-person cohort study. <i>Br J Sports Med</i>
+            59(17):1203–1210.
+            <a href="https://pubmed.ncbi.nlm.nih.gov/40623829/">PubMed</a> ·
+            <a href="https://blogs.bmj.com/bjsm/?p=11751">BJSM blog</a></li>
+          <li>Stöggl T, Sperlich B (2014). Polarized training has greater impact on key
+            endurance variables than threshold, high intensity, or high volume training.
+            <i>Front Physiol</i> 5:33.</li>
+          <li>Bosquet L et al. (2007). Effects of tapering on performance: a meta-analysis.
+            <i>Med Sci Sports Exerc</i> 39:1358–1365.</li>
+          <li>Riegel PS (1981). Athletic records and human endurance. <i>American Scientist</i>
+            69:285–290. Formula: T2 = T1 × (D2 / D1)<sup>1.06</sup>.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p id="footer-note"></p>
+  <p>Built by hand: one HTML file, hand-written SVG charts, no libraries.</p>
+</footer>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   DATA
+   ========================================================================== */
+
+/**
+ * Every run from my Strava export, 2025–2026.
+ * Row: [date (UTC), km, moving_s, grade_adjusted_km, avg_hr, max_hr, tag]
+ * tag 'R' = race-type effort. avg_hr / max_hr are null before June 2026.
+ * 2026-03-04 uses elapsed time (1965 s) because the moving time is a GPS glitch.
+ */
+const RAW = [
+  ["2025-01-04", 5.4, 1567, 5.4, null, null, ""],
+  ["2025-01-15", 9.79, 3162, 9.81, null, null, ""],
+  ["2025-01-17", 11.88, 4112, 12.21, null, null, ""],
+  ["2025-01-22", 11.29, 3627, 11.5, null, null, ""],
+  ["2025-01-27", 4.83, 1384, 4.83, null, null, ""],
+  ["2025-02-03", 5.52, 1683, 5.52, null, null, ""],
+  ["2025-02-05", 6.44, 2061, 6.45, null, null, ""],
+  ["2025-02-18", 4.99, 1530, 5.0, null, null, ""],
+  ["2025-03-12", 16.03, 5369, 16.43, null, null, ""],
+  ["2025-03-23", 10.01, 3089, 10.08, null, null, ""],
+  ["2025-04-05", 8.03, 2209, 8.03, null, null, ""],
+  ["2025-04-29", 10.04, 2876, 10.03, null, null, ""],
+  ["2025-04-30", 5.16, 1712, 5.13, null, null, ""],
+  ["2025-05-03", 15.04, 4358, 15.07, null, null, ""],
+  ["2025-09-03", 5.0, 1810, 5.24, null, null, ""],
+  ["2025-10-21", 6.0, 2102, 6.01, null, null, ""],
+  ["2025-10-23", 7.02, 2504, 7.03, null, null, ""],
+  ["2025-10-27", 5.24, 2064, 5.25, null, null, ""],
+  ["2026-01-17", 7.59, 2307, 7.61, null, null, ""],
+  ["2026-01-26", 5.11, 1993, 5.12, null, null, ""],
+  ["2026-01-27", 13.06, 5025, 13.08, null, null, ""],
+  ["2026-01-30", 5.83, 1621, 5.83, null, null, ""],
+  ["2026-02-02", 6.49, 2367, 6.5, null, null, ""],
+  ["2026-02-09", 11.42, 4932, 12.36, null, null, ""],
+  ["2026-02-18", 4.01, 1621, 4.69, null, null, ""],
+  ["2026-02-24", 4.02, 1562, 5.01, null, null, ""],
+  ["2026-02-27", 2.25, 655, 2.51, null, null, ""],
+  ["2026-03-02", 6.01, 2482, 6.72, null, null, ""],
+  ["2026-03-04", 4.77, 1965, 5.12, null, null, ""],
+  ["2026-03-11", 5.68, 2349, 6.1, null, null, ""],
+  ["2026-03-15", 8.05, 2852, 8.58, null, null, ""],
+  ["2026-03-17", 5.02, 1886, 5.08, null, null, ""],
+  ["2026-03-21", 10.01, 3285, 10.06, null, null, ""],
+  ["2026-03-31", 6.01, 2285, 6.34, null, null, ""],
+  ["2026-04-03", 5.41, 2063, 5.72, null, null, ""],
+  ["2026-04-05", 16.05, 6237, 16.52, null, null, ""],
+  ["2026-04-08", 5.08, 1918, 5.37, null, null, ""],
+  ["2026-04-12", 19.07, 7630, 20.52, null, null, ""],
+  ["2026-05-03", 3.05, 1093, 3.59, null, null, ""],
+  ["2026-05-06", 8.17, 3090, 8.93, null, null, ""],
+  ["2026-05-09", 13.03, 4884, 13.86, null, null, ""],
+  ["2026-05-16", 12.43, 4777, 13.12, null, null, ""],
+  ["2026-06-07", 11.39, 4796, 12.93, 147, 187, ""],
+  ["2026-06-09", 8.69, 3114, 9.12, 157, 184, ""],
+  ["2026-06-11", 10.7, 3595, 11.62, 165, 186, ""],
+  ["2026-06-15", 7.72, 3123, 7.79, 157, 190, ""],
+  ["2026-06-27", 8.12, 2932, 8.8, 153, 179, ""],
+  ["2026-07-01", 5.83, 2092, 6.29, 161, 180, ""],
+  ["2026-07-05", 11.38, 4204, 12.18, 155, 178, ""],
+  ["2026-07-08", 4.88, 1848, 5.22, 149, 183, ""],
+  ["2026-07-21", 5.2, 1797, 5.21, 145, 159, ""],
+  ["2026-07-24", 5.8, 2037, 5.81, 149, 161, ""],
+  ["2026-07-25", 13.72, 4846, 13.74, 157, 173, ""],
+  ["2026-07-27", 1.95, 540, 1.95, 161, 186, ""],
+  ["2026-07-29", 5.32, 1728, 5.32, 149, 163, ""],
+  ["2026-07-30", 5.23, 1801, 5.23, 151, 170, ""],
+  ["2026-08-02", 8.83, 3000, 8.84, 148, 175, ""],
+  ["2026-08-03", 5.49, 1801, 5.49, 153, 169, ""],
+  ["2026-08-04", 8.98, 3140, 8.99, 154, 179, ""],
+  ["2026-08-06", 4.54, 1931, 4.65, 142, 186, ""],
+  ["2026-08-09", 10.14, 3958, 10.16, 142, 155, ""],
+  ["2026-08-11", 9.34, 2823, 9.37, 175, 188, ""],
+  ["2026-08-13", 4.66, 1814, 4.87, 142, 168, ""],
+  ["2026-08-14", 11.68, 3914, 11.74, 157, 203, ""],
+  ["2026-08-16", 6.73, 2700, 7.18, 140, 177, ""],
+  ["2026-08-18", 8.01, 2222, 8.05, 164, 182, ""],
+  ["2026-08-20", 4.93, 1857, 4.95, 137, 174, ""],
+  ["2026-08-21", 14.79, 6300, 15.21, 144, 171, ""],
+  ["2026-08-24", 8.63, 4426, 8.88, 138, 165, ""],
+  ["2026-08-27", 10.07, 3780, 10.08, 160, 195, ""],
+  ["2026-08-28", 5.0, 1191, 5.02, 157, 179, "R"],
+  ["2026-08-29", 8.35, 4268, 9.78, 134, 176, ""],
+  ["2026-08-31", 7.07, 2616, 7.54, 144, 178, ""],
+  ["2026-09-01", 8.24, 2966, 8.6, 137, 163, ""],
+  ["2026-09-05", 1.25, 265, 1.25, 162, 180, ""],
+  ["2026-09-05", 19.23, 7815, 20.14, 143, 172, ""],
+  ["2026-09-08", 6.66, 2434, 7.13, 153, 178, ""],
+  ["2026-09-10", 12.05, 4033, 12.12, 163, 200, ""],
+  ["2026-09-11", 15.07, 5557, 15.4, null, null, ""],
+  ["2026-09-16", 7.25, 2881, 7.35, 129, 150, ""],
+  ["2026-09-17", 12.56, 3288, 12.56, 168, 198, ""],
+  ["2026-09-21", 10.74, 3339, 10.95, 158, 191, ""],
+  ["2026-09-24", 10.94, 3060, 10.95, 163, 187, ""],
+  ["2026-09-25", 16.72, 6300, 17.03, 141, 152, ""],
+  ["2026-09-29", 7.97, 2206, 7.97, 167, 197, ""],
+  ["2026-10-02", 7.7, 1855, 7.84, 183, 203, "R"],
+  ["2026-10-06", 9.18, 3286, 9.49, 147, 171, ""],
+  ["2026-10-10", 18.22, 6001, 18.74, 155, 181, ""],
+  ["2026-10-13", 8.05, 2699, 8.56, 150, 174, ""],
+  ["2026-10-15", 12.43, 3447, 12.43, 175, 201, ""],
+  ["2026-10-16", 15.0, 5136, 15.43, 149, 181, ""],
+  ["2026-10-19", 6.5, 2343, 6.91, 148, 172, ""],
+  ["2026-10-22", 14.39, 3935, 14.39, 183, 203, ""],
+  ["2026-10-24", 13.06, 4427, 13.72, 152, 173, ""],
+  ["2026-10-27", 11.59, 3040, 11.59, 172, 205, ""],
+  ["2026-10-28", 7.73, 2596, 8.18, 149, 172, ""],
+  ["2026-11-01", 6.79, 2426, 6.82, 134, 151, ""],
+  ["2026-11-03", 7.19, 2636, 7.56, 142, 168, ""],
+  ["2026-11-05", 9.18, 3037, 9.18, 167, 197, ""],
+  ["2026-11-06", 15.17, 5084, 15.32, 159, 200, ""],
+  ["2026-11-10", 9.73, 3120, 10.18, 153, 180, ""],
+  ["2026-11-12", 2.27, 748, 2.21, 144, 154, ""],
+  ["2026-11-12", 11.87, 3657, 11.87, 176, 196, ""],
+  ["2026-11-17", 10.8, 3569, 10.8, 160, 191, ""],
+  ["2026-11-19", 6.18, 2318, 6.38, 141, 167, ""],
+  ["2026-11-23", 6.28, 2258, 6.44, 137, 158, ""],
+  ["2026-11-24", 10.63, 4020, 11.63, 159, 190, ""]
+];
+
+/** Settings for classification and the goal. Change here, not in the page text. */
+const CONFIG = {
+  asOf: "2026-11-25",        // data snapshot date; stats are computed up to here
+  hardAvgHr: 158,            // hard if average HR at or above this...
+  hardMaxHr: 195,            // ...or max HR at or above this
+  longKm: 15,                // long run if 15 km or more
+  effMaxPaceS: 420,          // leave out runs slower than 7:00/km grade-adjusted
+  goalPaceS: 227,            // 3:47/km = 18:55 for 5 km
+  raceDate: "2027-02-20",
+  riegelExp: 1.06,           // published exponent
+  riegelExpSteep: 1.10,      // steeper exponent, for illustration only (no published source)
+};
+
+/**
+ * The 22 October 2026 track session. The Strava CSV has no splits, so they are
+ * kept here. Self-reported; distance checked by counting 25 laps in lane 1.
+ */
+const TRACK_EFFORT = {
+  date: "2026-10-22",
+  splitsS: [226, 222, 230, 230, 233, 234, 230, 233, 242, 239], // 10 continuous km
+  strava5kBestS: 1139,       // Strava's best 5 km effort (18:59), not tied to km markers
+  check: "25 laps in lane 1",
+};
+
+/** The 12-week plan. km = weekly total; longKm = suggested Sunday long run. */
+const PLAN = [
+  { wk: 1,  start: "30 Nov", km: 33, longKm: 12 },
+  { wk: 2,  start: "7 Dec",  km: 36, longKm: 13 },
+  { wk: 3,  start: "14 Dec", km: 41, longKm: 14 },
+  { wk: 4,  start: "21 Dec", km: 30, longKm: 11, note: "Recovery" },
+  { wk: 5,  start: "28 Dec", km: 37, longKm: 14, note: "~90% of week 3" },
+  { wk: 6,  start: "4 Jan",  km: 43, longKm: 15 },
+  { wk: 7,  start: "11 Jan", km: 49, longKm: 16, note: "Peak" },
+  { wk: 8,  start: "18 Jan", km: 33, longKm: 11, note: "Recovery + time trial" },
+  { wk: 9,  start: "25 Jan", km: 44, longKm: 15, note: "~90% of week 7" },
+  { wk: 10, start: "1 Feb",  km: 48, longKm: 16, note: "Last full week" },
+  { wk: 11, start: "8 Feb",  km: 28, longKm: 10, note: "Taper" },
+  { wk: 12, start: "15 Feb", km: 25, longKm: 0,  note: "Race week" },
+];
+
+/* ==========================================================================
+   HELPERS
+   ========================================================================== */
+
+/** Turn RAW rows into objects with derived fields. */
+const runs = RAW.map(([date, km, movingS, gadKm, avgHr, maxHr, tag]) => {
+  const r = { date, km, movingS, gadKm, avgHr, maxHr, tag };
+  r.paceS = movingS / km;              // seconds per km
+  r.gapS  = movingS / gadKm;           // grade-adjusted seconds per km
+  r.type  = classify(r);
+  return r;
+});
+
+/** hard / long / easy, or "unknown" when there is no heart rate. Race efforts are always hard. */
+function classify(r) {
+  if (r.tag === "R") return "hard";
+  if (r.avgHr == null) return r.km >= CONFIG.longKm ? "long" : "unknown";
+  if (r.avgHr >= CONFIG.hardAvgHr || r.maxHr >= CONFIG.hardMaxHr) return "hard";
+  if (r.km >= CONFIG.longKm) return "long";
+  return "easy";
+}
+
+/** Metres per heartbeat: grade-adjusted metres per minute divided by beats per minute. */
+const efficiency = r => (r.gadKm * 1000 / (r.movingS / 60)) / r.avgHr;
+
+/** Riegel projection: time T1 over D1 → time over D2. */
+const riegel = (t1, d1, d2, e = CONFIG.riegelExp) => t1 * Math.pow(d2 / d1, e);
+
+/** 1191 → "19:51"; 3940 → "1:05:40". */
+function fmtTime(s) {
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const ss = String(sec).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+const fmtPace = s => fmtTime(s);       // pace per km uses the same m:ss format
+const fmtKm = (km, dp = 1) => km.toFixed(dp);
+
+/** Dates are UTC date strings; do all date maths in UTC to avoid timezone drift. */
+const toDate = s => new Date(s + "T00:00:00Z");
+const isoDate = d => d.toISOString().slice(0, 10);
+const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+function mondayOf(d) {
+  const day = (d.getUTCDay() + 6) % 7;  // Monday = 0
+  return addDays(d, -day);
+}
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtDay = d => `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+const fmtDayYear = d => `${fmtDay(d)} ${d.getUTCFullYear()}`;
+
+/** Minimal SVG element builder. */
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function text(parent, x, y, str, attrs = {}) {
+  const t = el("text", { x, y, ...attrs }, parent);
+  t.textContent = str;
+  return t;
+}
+
+/** A bar with 4px rounded top corners and a square base on the baseline. */
+function barPath(x, y, w, h, r = 4) {
+  if (h <= 0) return "";
+  r = Math.min(r, w / 2, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}` +
+         `Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+/** "Nice" axis maximum and tick step. */
+function niceScale(max, ticks = 4) {
+  const raw = max / ticks;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw);
+  return { max: Math.ceil(max / step) * step, step };
+}
+
+/** One tooltip per chart, positioned inside the chart box. */
+function makeTooltip(box) {
+  const tip = document.createElement("div");
+  tip.className = "tooltip";
+  box.appendChild(tip);
+  return {
+    show(html, x, y) {
+      tip.innerHTML = html;
+      tip.style.opacity = 1;
+      const bw = box.clientWidth, tw = tip.offsetWidth;
+      tip.style.left = Math.max(0, Math.min(bw - tw, x - tw / 2)) + "px";
+      tip.style.top = (y - tip.offsetHeight - 10) + "px";
+    },
+    hide() { tip.style.opacity = 0; },
+  };
+}
+
+/** Start a chart: clear the box, create a responsive SVG sized to the box. */
+function startChart(id, height) {
+  const box = document.getElementById(id);
+  box.innerHTML = "";
+  const width = Math.max(320, box.clientWidth);
+  const svg = el("svg", { viewBox: `0 0 ${width} ${height}`, role: "img" }, box);
+  return { box, svg, width, height, tip: makeTooltip(box) };
+}
+
+/** Horizontal gridlines with y-axis labels. */
+function yGrid(svg, m, width, y, ticks, fmt) {
+  for (const v of ticks) {
+    const yy = y(v);
+    el("line", { x1: m.l, x2: width - m.r, y1: yy, y2: yy, class: "gridline" }, svg);
+    text(svg, m.l - 8, yy + 4, fmt(v), { "text-anchor": "end", class: "num" });
+  }
+}
+
+/* ==========================================================================
+   STATS (all computed from RAW)
+   ========================================================================== */
+
+const asOf = toDate(CONFIG.asOf);
+const thisMonday = mondayOf(asOf);
+const twelveStart = addDays(thisMonday, -84);  // last 12 complete weeks
+
+const runs2026 = runs.filter(r => r.date.startsWith("2026") && r.date <= CONFIG.asOf);
+const km2026 = runs2026.reduce((a, r) => a + r.km, 0);
+
+const last12 = runs.filter(r => r.date >= isoDate(twelveStart) && r.date < isoDate(thisMonday));
+const last12Km = last12.reduce((a, r) => a + r.km, 0);
+const last12WithHr = last12.filter(r => r.avgHr != null);
+const last12Hard = last12WithHr.filter(r => r.type === "hard");
+
+const parkrun = runs.find(r => r.tag === "R" && Math.abs(r.km - 5) < 0.1);
+const effort77 = runs.find(r => r.date === "2026-10-02");
+const trackTotalS = TRACK_EFFORT.splitsS.reduce((a, b) => a + b, 0);
+const track5kS = Math.min(...TRACK_EFFORT.splitsS.map((_, i, a) =>
+  i + 5 <= a.length ? a.slice(i, i + 5).reduce((x, y) => x + y, 0) : Infinity));
+
+/* ==========================================================================
+   RENDER: tiles, intro text, evidence cards
+   ========================================================================== */
+
+function renderTiles() {
+  const daysToRace = Math.ceil((toDate(CONFIG.raceDate) - toDate(isoDate(new Date()))) / 86400000);
+  const tiles = [
+    { label: "Distance run in 2026", value: `${Math.round(km2026)} km`, note: `${runs2026.length} runs` },
+    { label: "Recent weekly average", value: `${Math.round(last12Km / 12)} km`,
+      note: `last 12 weeks, ${(last12.length / 12).toFixed(1)} runs/week` },
+    { label: "Runs that were hard", value: `${Math.round(100 * last12Hard.length / last12WithHr.length)}%`,
+      note: `${last12Hard.length} of ${last12WithHr.length}, last 12 weeks` },
+    { label: "Best official 5k", value: fmtTime(parkrun.movingS), note: "parkrun, August 2026" },
+    { label: "Goal", value: "18:55", note: "3:47 per km", highlight: true },
+    { label: daysToRace > 0 ? "Days to race day" : "Race day", value: daysToRace > 0 ? daysToRace : "Done",
+      note: "Saturday 20 February 2027" },
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(t => `
+    <div class="card tile${t.highlight ? " highlight" : ""}">
+      <div class="label">${t.label}</div>
+      <div class="value">${t.value}</div>
+      <div class="note">${t.note}</div>
+    </div>`).join("");
+
+  document.getElementById("training-intro").textContent =
+    `Over the last 12 complete weeks I averaged ${Math.round(last12Km / 12)} km a week across about ` +
+    `${Math.round(last12.length / 12)} runs, and ${last12Hard.length} of ${last12WithHr.length} runs ` +
+    `with heart-rate data were hard. That's a lot of intensity for the volume, and it's the main ` +
+    `thing the plan changes.`;
+
+  document.getElementById("footer-note").textContent =
+    `Data up to ${fmtDayYear(asOf)}. ${runs.length} runs from 2025–2026.`;
+}
+
+function renderEvidence() {
+  const e77Riegel = riegel(effort77.movingS, effort77.km, 5);
+  const e77Steep  = riegel(effort77.movingS, effort77.km, 5, CONFIG.riegelExpSteep);
+  const trackRiegel = riegel(trackTotalS, 10, 5);
+  const cards = [
+    { pill: "Race result", title: fmtTime(parkrun.movingS), sub: "parkrun, 5 km",
+      body: `My best official 5k. Strava lists it on ${parkrun.date} (UTC); it was a Saturday morning in New Zealand.` },
+    { pill: "Training effort", title: `${fmtTime(track5kS)} · ${fmtTime(trackTotalS)}`,
+      sub: "fastest 5 km · 10 km, inside a track session",
+      body: `10 continuous kilometres at ${fmtPace(trackTotalS / 10)}/km on 22 October. ` +
+            `Riegel turns the 10 km into about <b>${fmtTime(trackRiegel)}</b> for 5k. ` +
+            `Strava's best 5 km within it was ${fmtTime(TRACK_EFFORT.strava5kBestS)}.` },
+    { pill: "Projection", title: `${fmtTime(e77Steep)}–${fmtTime(e77Riegel)}`,
+      sub: `from ${fmtTime(effort77.movingS)} for ${fmtKm(effort77.km)} km`,
+      body: `A hard ${fmtKm(effort77.km)} km at ${fmtPace(effort77.paceS)}/km on 2 October. ` +
+            `Riegel's exponent of ${CONFIG.riegelExp} gives ${fmtTime(e77Riegel)}; a steeper ` +
+            `${CONFIG.riegelExpSteep.toFixed(2)}, shown for illustration only, gives ${fmtTime(e77Steep)}.` },
+  ];
+  document.getElementById("evidence").innerHTML = cards.map(c => `
+    <div class="card">
+      <span class="pill">${c.pill}</span>
+      <div style="font-size:1.6rem;font-weight:650;margin-top:8px" class="num">${c.title}</div>
+      <div class="small muted" style="margin-bottom:8px">${c.sub}</div>
+      <p class="small">${c.body}</p>
+    </div>`).join("");
+
+  document.getElementById("track-intro").textContent =
+    `Warm-up, then 10 km without stopping, then cool-down. The first five kilometres were all at or ` +
+    `under goal pace; the last two slowed past 4:00. Lower is faster.`;
+}
+
+/* ==========================================================================
+   CHART: weekly distance (stacked: easy/long + hard)
+   ========================================================================== */
+
+function weeklyData() {
+  const weeks = [];
+  for (let i = 25; i >= 0; i--) {
+    const start = addDays(thisMonday, -7 * i);
+    const end = addDays(start, 7);
+    const inWeek = runs.filter(r => r.date >= isoDate(start) && r.date < isoDate(end));
+    const hard = inWeek.filter(r => r.type === "hard").reduce((a, r) => a + r.km, 0);
+    const total = inWeek.reduce((a, r) => a + r.km, 0);
+    weeks.push({ start, hard, easy: total - hard, total, n: inWeek.length, partial: i === 0 });
+  }
+  return weeks;
+}
+
+function renderWeekly() {
+  const data = weeklyData();
+  const { svg, width, height, tip } = startChart("chart-weekly", 260);
+  const m = { t: 12, r: 8, b: 28, l: 36 };
+  const { max, step } = niceScale(Math.max(...data.map(d => d.total)));
+  const ih = height - m.t - m.b, iw = width - m.l - m.r;
+  const y = v => m.t + ih - (v / max) * ih;
+  const slot = iw / data.length, bw = Math.max(4, slot - 4);
+  const ticks = []; for (let v = 0; v <= max; v += step) ticks.push(v);
+  yGrid(svg, m, width, y, ticks, v => v);
+
+  data.forEach((d, i) => {
+    const x = m.l + i * slot + (slot - bw) / 2;
+    const hEasy = (d.easy / max) * ih, hHard = (d.hard / max) * ih;
+    const gap = d.easy > 0 && d.hard > 0 ? 2 : 0;          // 2px surface gap between segments
+    // Easy/long sits on the baseline; hard is stacked on top with the rounded end.
+    if (d.hard > 0) {
+      el("path", { d: barPath(x, y(0) - hEasy - hHard, bw, hHard), fill: "var(--series-2)" }, svg);
+      if (hEasy > 0) el("rect", { x, y: y(0) - hEasy + gap, width: bw, height: Math.max(0, hEasy - gap), fill: "var(--series-1)" }, svg);
+    } else if (hEasy > 0) {
+      el("path", { d: barPath(x, y(0) - hEasy, bw, hEasy), fill: "var(--series-1)" }, svg);
+    }
+    if (d.partial) el("rect", { x, y: m.t, width: bw, height: ih, fill: "var(--grid)", opacity: 0.35 }, svg);
+    // Month label on the first week of each month.
+    if (i === 0 || d.start.getUTCMonth() !== data[i - 1].start.getUTCMonth()) {
+      text(svg, x, height - 8, MONTHS[d.start.getUTCMonth()]);
+    }
+    // Hover target covers the whole column.
+    const hit = el("rect", { x: m.l + i * slot, y: m.t, width: slot, height: ih, class: "hit" }, svg);
+    hit.addEventListener("mouseenter", () => tip.show(
+      `<b>Week of ${fmtDay(d.start)}</b>${d.partial ? " (in progress)" : ""}<br>` +
+      `${fmtKm(d.total)} km over ${d.n} run${d.n === 1 ? "" : "s"}<br>` +
+      `Hard: ${fmtKm(d.hard)} km`, x + bw / 2, y(d.total)));
+    hit.addEventListener("mouseleave", tip.hide);
+  });
+  el("line", { x1: m.l, x2: width - m.r, y1: y(0), y2: y(0), class: "baseline" }, svg);
+
+  // Table view (also the relief for the lighter orange in light mode).
+  document.getElementById("table-weekly").innerHTML =
+    `<table><thead><tr><th>Week of</th><th class="r">Runs</th><th class="r">Total km</th><th class="r">Hard km</th></tr></thead><tbody>` +
+    data.map(d => `<tr><td>${fmtDayYear(d.start)}${d.partial ? " (in progress)" : ""}</td>` +
+      `<td class="r">${d.n}</td><td class="r">${fmtKm(d.total)}</td><td class="r">${fmtKm(d.hard)}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
+/* ==========================================================================
+   CHART: easy-run efficiency over time
+   ========================================================================== */
+
+function renderEfficiency() {
+  const pts = runs
+    .filter(r => r.type === "easy" && r.gapS <= CONFIG.effMaxPaceS)
+    .map(r => ({ r, d: toDate(r.date), v: efficiency(r) }));
+  const { svg, width, height, tip } = startChart("chart-eff", 240);
+  const m = { t: 12, r: 12, b: 28, l: 40 };
+  const ih = height - m.t - m.b, iw = width - m.l - m.r;
+  const d0 = toDate("2026-06-01").getTime(), d1 = addDays(asOf, 5).getTime();
+  const x = d => m.l + ((d.getTime() - d0) / (d1 - d0)) * iw;
+  // Axis range from the data, rounded out to the nearest 0.1.
+  const lo = Math.floor(Math.min(...pts.map(p => p.v)) * 10) / 10;
+  const hi = Math.ceil(Math.max(...pts.map(p => p.v)) * 10) / 10;
+  const y = v => m.t + ih - ((v - lo) / (hi - lo)) * ih;
+  const effTicks = []; for (let v = lo; v <= hi + 1e-9; v += 0.1) effTicks.push(v);
+  yGrid(svg, m, width, y, effTicks, v => v.toFixed(1));
+  for (let mo = 5; mo <= 10; mo++) {                       // Jun–Nov month labels
+    const d = new Date(Date.UTC(2026, mo, 1));
+    text(svg, x(d), height - 8, MONTHS[mo]);
+  }
+  el("line", { x1: m.l, x2: width - m.r, y1: y(lo), y2: y(lo), class: "baseline" }, svg);
+
+  // 5-run rolling average line.
+  const roll = pts.map((p, i) => {
+    const w = pts.slice(Math.max(0, i - 4), i + 1);
+    return { d: p.d, v: w.reduce((a, q) => a + q.v, 0) / w.length };
+  }).slice(4);
+  el("path", {
+    d: roll.map((p, i) => `${i ? "L" : "M"}${x(p.d).toFixed(1)},${y(p.v).toFixed(1)}`).join(""),
+    fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round",
+  }, svg);
+
+  // Dots with a surface ring; generous hit circles for hover.
+  pts.forEach(p => {
+    const cx = x(p.d), cy = y(p.v);
+    el("circle", { cx, cy, r: 4.5, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2, opacity: 0.55 }, svg);
+    const hit = el("circle", { cx, cy, r: 10, class: "hit" }, svg);
+    hit.addEventListener("mouseenter", () => tip.show(
+      `<b>${fmtDayYear(p.d)}</b><br>${fmtKm(p.r.km, 2)} km at ${fmtPace(p.r.paceS)}/km<br>` +
+      `Avg HR ${p.r.avgHr} · ${p.v.toFixed(2)} m/beat`, cx, cy));
+    hit.addEventListener("mouseleave", tip.hide);
+  });
+
+  // Direct label at the end of the rolling line.
+  const last = roll[roll.length - 1];
+  text(svg, x(last.d) - 4, y(last.v) - 10, `${last.v.toFixed(2)}`, { "text-anchor": "end", class: "label-strong num" });
+
+  // July vs October–November change, computed.
+  const mean = arr => arr.reduce((a, p) => a + p.v, 0) / arr.length;
+  const jul = pts.filter(p => p.r.date.startsWith("2026-07"));
+  const late = pts.filter(p => p.r.date >= "2026-10-01");
+  const change = 100 * (mean(late) / mean(jul) - 1);
+  document.getElementById("eff-note").textContent =
+    `Average easy-run efficiency rose about ${Math.round(change)}% from July (${jul.length} runs) to ` +
+    `October–November (${late.length} runs). Heat, hills, tiredness and the wrist sensor all add ` +
+    `noise, so read this as a direction rather than a precise number.`;
+}
+
+/* ==========================================================================
+   CHART: 22 October splits vs goal pace (lower = faster)
+   ========================================================================== */
+
+function renderSplits() {
+  const s = TRACK_EFFORT.splitsS;
+  const { svg, width, height, tip } = startChart("chart-splits", 230);
+  const m = { t: 16, r: 12, b: 28, l: 44 };
+  const ih = height - m.t - m.b, iw = width - m.l - m.r;
+  const lo = 215, hi = 245;                                // 3:35 to 4:05 per km
+  const y = v => m.t + ((v - lo) / (hi - lo)) * ih;        // faster (smaller) sits higher
+  const x = i => m.l + (i + 0.5) * (iw / s.length);
+  yGrid(svg, m, width, y, [220, 230, 240], fmtPace);
+  s.forEach((_, i) => text(svg, x(i), height - 8, `${i + 1}`, { "text-anchor": "middle" }));
+
+  // Goal pace reference (a threshold, so it is dashed).
+  const gy = y(CONFIG.goalPaceS);
+  el("line", { x1: m.l, x2: width - m.r, y1: gy, y2: gy, stroke: "var(--ink-2)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }, svg);
+  text(svg, width - m.r, gy - 6, "Goal 3:47", { "text-anchor": "end", class: "label-strong" });
+
+  el("path", {
+    d: s.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(""),
+    fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round",
+  }, svg);
+  s.forEach((v, i) => {
+    el("circle", { cx: x(i), cy: y(v), r: 5, fill: "var(--series-1)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
+    const hit = el("rect", { x: x(i) - iw / s.length / 2, y: m.t, width: iw / s.length, height: ih, class: "hit" }, svg);
+    const cum = s.slice(0, i + 1).reduce((a, b) => a + b, 0);
+    hit.addEventListener("mouseenter", () => tip.show(
+      `<b>Km ${i + 1}: ${fmtPace(v)}</b><br>${v <= CONFIG.goalPaceS ? "At or under" : "Slower than"} goal pace<br>` +
+      `Running total ${fmtTime(cum)}`, x(i), y(v)));
+    hit.addEventListener("mouseleave", tip.hide);
+  });
+  // Selective direct labels: fastest and slowest kilometre.
+  const iMin = s.indexOf(Math.min(...s)), iMax = s.indexOf(Math.max(...s));
+  text(svg, x(iMin), y(s[iMin]) - 10, fmtPace(s[iMin]), { "text-anchor": "middle", class: "label-strong num" });
+  text(svg, x(iMax), y(s[iMax]) + 20, fmtPace(s[iMax]), { "text-anchor": "middle", class: "label-strong num" });
+
+  document.getElementById("table-splits").innerHTML =
+    `<table><thead><tr><th>Km</th><th class="r">Split</th><th class="r">Running total</th></tr></thead><tbody>` +
+    s.map((v, i) => `<tr><td>${i + 1}</td><td class="r">${fmtPace(v)}</td>` +
+      `<td class="r">${fmtTime(s.slice(0, i + 1).reduce((a, b) => a + b, 0))}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
+/* ==========================================================================
+   CHART + TABLE: the plan
+   ========================================================================== */
+
+function renderPlan() {
+  const { svg, width, height, tip } = startChart("chart-plan", 250);
+  const m = { t: 24, r: 8, b: 28, l: 36 };
+  const ih = height - m.t - m.b, iw = width - m.l - m.r;
+  const { max, step } = niceScale(Math.max(...PLAN.map(p => p.km)));
+  const y = v => m.t + ih - (v / max) * ih;
+  const slot = iw / PLAN.length, bw = Math.min(44, slot - 10);
+  const ticks = []; for (let v = 0; v <= max; v += step) ticks.push(v);
+  yGrid(svg, m, width, y, ticks, v => v);
+
+  PLAN.forEach((p, i) => {
+    const x = m.l + i * slot + (slot - bw) / 2;
+    const hLong = (p.longKm / max) * ih, hAll = (p.km / max) * ih;
+    // Long run on the baseline, the rest stacked above with the rounded end.
+    el("path", { d: barPath(x, y(0) - hAll, bw, hAll - hLong - (hLong ? 2 : 0)), fill: "var(--series-1)" }, svg);
+    if (hLong) el("rect", { x, y: y(0) - hLong, width: bw, height: hLong, fill: "var(--series-2)" }, svg);
+    text(svg, x + bw / 2, height - 8, `W${p.wk}`, { "text-anchor": "middle" });
+    // Selective labels for the moments that matter.
+    const tag = { 4: "Recovery", 7: "Peak", 8: "Time trial", 11: "Taper", 12: "Race" }[p.wk];
+    if (tag) text(svg, x + bw / 2, y(p.km) - 7, tag, { "text-anchor": "middle", class: "label-strong" });
+    const hit = el("rect", { x: m.l + i * slot, y: m.t, width: slot, height: ih, class: "hit" }, svg);
+    hit.addEventListener("mouseenter", () => tip.show(
+      `<b>Week ${p.wk}, from ${p.start}</b><br>${p.km} km` +
+      (p.longKm ? `, long run ${p.longKm} km` : ", race on Saturday") +
+      (p.note ? `<br>${p.note}` : ""), x + bw / 2, y(p.km)));
+    hit.addEventListener("mouseleave", tip.hide);
+  });
+  el("line", { x1: m.l, x2: width - m.r, y1: y(0), y2: y(0), class: "baseline" }, svg);
+
+  document.getElementById("table-plan").innerHTML =
+    `<table><thead><tr><th>Week</th><th>Starts</th><th class="r">km</th><th class="r">Long run</th><th>Note</th></tr></thead><tbody>` +
+    PLAN.map(p => `<tr><td>${p.wk}</td><td>${p.start}</td><td class="r">${p.km}</td>` +
+      `<td class="r">${p.longKm ? p.longKm + " km" : "—"}</td><td>${p.note || ""}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
+/* ==========================================================================
+   BOOT
+   ========================================================================== */
+
+function renderCharts() {
+  renderWeekly();
+  renderEfficiency();
+  renderSplits();
+  renderPlan();
+}
+
+renderTiles();
+renderEvidence();
+renderCharts();
+
+// Charts are drawn at the real container width; redraw when it changes.
+let resizeTimer;
+let lastWidth = document.body.clientWidth;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (document.body.clientWidth !== lastWidth) {
+      lastWidth = document.body.clientWidth;
+      renderCharts();
+    }
+  }, 150);
+});
+</script>
+</body>
+</html>
